@@ -35,43 +35,14 @@ pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gasolina_lock = PTHREAD_MUTEX_INITIALIZER;
 int carros_pista, fim = 0, enchendo_gasolina=0; /* Ao chegar em um, significa que acabará a corrida*/
 int bombas_gasolina = QNT_BOMBAS_GASOLINA;
+int  bomba_cheia=0;
 
-int vet[100];
-
-int ocupa_posicao(void *arg){
-	int i=0, j, aux;
-    int id = *((int *) arg);
-	while(1){
-		for( j=0;j<QNT_CARROS;j++){
-			if(posicoes[j].carro_ocupado == j){
-				break;
-			}
-		}
-		if(posicoes[i].ocupado == 0 ){
-			if(posicoes[i].carro_ocupado != id){
-				aux = posicoes[i].carro_ocupado;
-				posicoes[i].carro_ocupado = id;
-				posicoes[j].carro_ocupado = aux;	
-			}
-			else{
-				posicoes[i].carro_ocupado = id;
-			}
-			posicoes[i].ocupado = 1;
-    		printf("id = %d ocupou %d\n",posicoes[i].carro_ocupado, 1+i );
-			return i;
-		}
-		i++;
-		if(i==QNT_CARROS){
-			i=0;
-		}
-	}
-
-	return 0;
-}
 
 void * print_posicoes(void *arg){
 	while(1){
 		sleep(4);
+		pthread_mutex_lock(&lock);
+		pthread_mutex_lock(&gasolina_lock);
 		printf("--------------------------Posicao atual --------------------------------\n");
 		for(int i=0;i<QNT_CARROS;i++){
 			if(posicoes[i].ocupado == 1){
@@ -83,6 +54,8 @@ void * print_posicoes(void *arg){
 			}
 		}
 		printf("\n");
+		pthread_mutex_unlock(&lock);
+		pthread_mutex_unlock(&gasolina_lock);
 	}
 }
 
@@ -104,8 +77,13 @@ void * frentistas_gasolina(void *arg){
     	pthread_mutex_lock(&gasolina_lock);
     	bombas_gasolina --;
     	enchendo_gasolina=0;
-    	pthread_cond_signal(&carro_status2);
-    	printf("Frenstista encheu um tanque\n");
+    	pthread_cond_signal(&carro_status2); /* Liberou um carro*/
+    	pthread_mutex_unlock(&gasolina_lock);
+    	sleep(3);
+    	printf("Frenstista liberou um carro\n");
+    	printf("Tem mais %d bombas e darei signal agora\n", bombas_gasolina);
+    	pthread_mutex_lock(&gasolina_lock);
+    	bomba_cheia = 0;
     	pthread_cond_signal(&carro_status);
 
     	pthread_mutex_unlock(&gasolina_lock);
@@ -118,11 +96,40 @@ void * frentistas_gasolina(void *arg){
 void * pista_corrida(void *arg){
 	int posicao_atual;
     int id = *((int *) arg);
+    int i, j, aux;
+
     while(fim==0){
     	pthread_mutex_lock(&lock);
     	printf("\n");
     	/*-----------------------------------------------funcao para ocupar posicao ---------------*/
-    	posicao_atual = ocupa_posicao((void*)arg);
+    	// posicao_atual = ocupa_posicao((void*)arg);
+    	i=0;
+    	int achou = 0;
+	    while(achou ==0){
+			for( j=0;j<QNT_CARROS;j++){
+				if(posicoes[j].carro_ocupado == id){
+					break;
+				}
+			}
+			if(posicoes[i].ocupado == 0 ){
+				if(posicoes[i].carro_ocupado != id){ /* verificaçao se mudou de  posição (houve ultrapassagem) o carro muda tb com o que estava no lugar*/
+					aux = posicoes[i].carro_ocupado;
+					posicoes[i].carro_ocupado = id;
+					posicoes[j].carro_ocupado = aux;	
+				}
+				else{
+					posicoes[i].carro_ocupado = id;
+				}
+				posicoes[i].ocupado = 1;
+	    		printf("id = %d ocupou %d\n",posicoes[i].carro_ocupado, 1+i );
+				achou = 1;
+				posicao_atual = i;
+			}
+			i++;
+			if(i==QNT_CARROS){
+				i=0;
+			}
+		}
     	/*-----------------------------------------------FIM funcao para ocupar posicao ---------------*/
     	pthread_mutex_unlock(&lock);
     	
@@ -135,15 +142,17 @@ void * pista_corrida(void *arg){
     		printf("Acordando frentista\n");	
     		pthread_cond_signal(&frentista_status);
     	}
-    	while(bombas_gasolina > QNT_BOMBAS_GASOLINA){
-
+    	if(bombas_gasolina > QNT_BOMBAS_GASOLINA){
+    		bomba_cheia = 1;
+    	}
+    	while(bomba_cheia == 1){
     		printf("Carro %d chegou e está esperando na fila\n", id );
     		pthread_cond_wait(&carro_status, &gasolina_lock);
     	}
     	enchendo_gasolina = 1;
     	while(enchendo_gasolina == 1){
     		printf("Carro %d esperando o frentista liberar\n", id );
-    		pthread_cond_wait(&carro_status2, &gasolina_lock);
+    		pthread_cond_wait(&carro_status2, &gasolina_lock); 
     	}
 
     	pthread_mutex_unlock(&gasolina_lock);
