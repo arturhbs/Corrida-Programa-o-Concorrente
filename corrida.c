@@ -13,10 +13,12 @@ prioridade para pegar as posições serão os carros logo atrás destas.
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
 
 #define QNT_CARROS 10
 #define QNT_BOMBAS_GASOLINA 1
 #define QNT_FRENTISTAS 1
+#define TEMPO_TOTAL 50
 
 
 typedef struct{
@@ -39,11 +41,16 @@ int bombas_gasolina = QNT_BOMBAS_GASOLINA;
 int  bomba_cheia=0;
 int bombeiro_car = 0;
 
+int tempo_durante ;
+int tempo_momentaneo;
+int tempo_inicio;
+
 
 void * print_posicoes(void *arg){
 	int i,j=0, aux, achou =0;
-	while(1){
+	while(fim ==0){
 		sleep(4);
+		tempo_durante = TEMPO_TOTAL-( tempo_momentaneo - tempo_inicio);
 		pthread_mutex_lock(&turno);
 		pthread_mutex_lock(&lock);
 		pthread_mutex_lock(&gasolina_lock);
@@ -72,6 +79,8 @@ void * print_posicoes(void *arg){
 		// }
 			
 		printf("\n\n--------------------------Posicao atual --------------------------------\n");
+		printf("Tempo : %d\n", tempo_durante);
+
 		for( i=0;i<QNT_CARROS;i++){
 			if(posicoes[i].ocupado == 1){
 				printf("Carro %d na posicao %d\n", posicoes[i].carro_ocupado, posicoes[i].posicao );
@@ -82,6 +91,21 @@ void * print_posicoes(void *arg){
 			}
 		}
 		printf("\n\n");
+		tempo_momentaneo = time(NULL);
+		if(tempo_durante <=0){
+			fim = 1;
+			printf("*******************************ACABOU**********************************\n");
+			for(i=0;i<QNT_CARROS;i++){
+				posicoes[i].ocupado =1;
+			}	
+			printf("\n\n--------------------------Posicao atual --------------------------------\n");
+			printf("Tempo : %d\n", tempo_durante);
+
+			for( i=0;i<QNT_CARROS;i++){
+				printf("Carro %d na posicao %d\n", posicoes[i].carro_ocupado, posicoes[i].posicao );
+			}
+			exit(0); /*Fecha o programa */
+		}
 		pthread_mutex_unlock(&gasolina_lock);
 		pthread_mutex_unlock(&lock);
 		pthread_mutex_unlock(&turno);
@@ -90,7 +114,7 @@ void * print_posicoes(void *arg){
 
 void * frentistas_gasolina(void *arg){
     int id = *((int *) arg);
-    while(1){
+    while(fim == 0){
 
     	pthread_mutex_lock(&turno);
     	pthread_mutex_lock(&gasolina_lock);
@@ -126,7 +150,7 @@ void * frentistas_gasolina(void *arg){
 
 void * fireman(void *arg){
 
-	while(1){
+	while(fim ==0){
 		sleep(30);
 		pthread_mutex_lock(&turno);
 		pthread_mutex_lock(&gasolina_lock);
@@ -135,7 +159,7 @@ void * fireman(void *arg){
 		printf("\n\n----------------------------------- WARNING -------------------------------\n\n");
 	    printf("Carros bateram, sera necessario a entrada dos bombeiros\n");
 		printf("Bombeiro salvando quem puder\n");
-		sleep(rand()%10 + 30);
+		sleep(rand()%10 + 10);
 		pthread_mutex_unlock(&lock);
 		pthread_mutex_unlock(&gasolina_lock);
 		bombeiro_car = 0;
@@ -172,7 +196,7 @@ void * pista_corrida(void *arg){
 					posicoes[i].carro_ocupado = id;
 				}
 				posicoes[i].ocupado = 1;
-	    		printf("id = %d ocupou %d\n",posicoes[i].carro_ocupado, 1+i );
+	    		printf("Carro %d ocupou %d posicao\n",posicoes[i].carro_ocupado, 1+i );
 				achou = 1;
 				posicao_atual = i;
 			}
@@ -185,7 +209,7 @@ void * pista_corrida(void *arg){
     	pthread_mutex_unlock(&lock);
     	pthread_mutex_unlock(&turno);
     	
-        sleep(rand()%15 + 4); /*andando com a gasolina aleatoria que ele tem*/
+        sleep(rand()%10 + 4); /*andando com a gasolina aleatoria que ele tem*/
     	if(bombeiro_car == 0){ /*Ao bombeiro entrar em campo, os carros "encostam e voltam direto para a pista quando ele sair"*/ 
 
     		printf("Carro %d esta indo abastecer\n", id );
@@ -229,6 +253,8 @@ int main(){
 	pthread_t printar_tela;
 	pthread_t bombeiro;
 	int i, *cont;
+	tempo_inicio = time(NULL);
+	 
     /* Inicializar bombas de gasolina*/
     bombas_gasolina = 0;
 	/*INicializar as posições que serão pegas pelos carros*/
