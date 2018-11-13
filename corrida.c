@@ -31,17 +31,20 @@ posicoes_carros posicoes[QNT_CARROS];
 pthread_cond_t carro_status = PTHREAD_COND_INITIALIZER;
 pthread_cond_t carro_status2 = PTHREAD_COND_INITIALIZER;
 pthread_cond_t frentista_status = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t turno = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gasolina_lock = PTHREAD_MUTEX_INITIALIZER;
 int carros_pista, fim = 0, enchendo_gasolina=0; /* Ao chegar em um, significa que acabará a corrida*/
 int bombas_gasolina = QNT_BOMBAS_GASOLINA;
 int  bomba_cheia=0;
+int bombeiro_car = 0;
 
 
 void * print_posicoes(void *arg){
 	int i,j=0, aux, achou =0;
 	while(1){
 		sleep(4);
+		pthread_mutex_lock(&turno);
 		pthread_mutex_lock(&lock);
 		pthread_mutex_lock(&gasolina_lock);
 
@@ -79,8 +82,9 @@ void * print_posicoes(void *arg){
 			}
 		}
 		printf("\n\n");
-		pthread_mutex_unlock(&lock);
 		pthread_mutex_unlock(&gasolina_lock);
+		pthread_mutex_unlock(&lock);
+		pthread_mutex_unlock(&turno);
 	}
 }
 
@@ -88,6 +92,7 @@ void * frentistas_gasolina(void *arg){
     int id = *((int *) arg);
     while(1){
 
+    	pthread_mutex_lock(&turno);
     	pthread_mutex_lock(&gasolina_lock);
     	/*colocando frentista para dormir caso nao tenham carros esperando*/
     	if(bombas_gasolina == 0){
@@ -95,16 +100,18 @@ void * frentistas_gasolina(void *arg){
     		pthread_cond_wait(&frentista_status, &gasolina_lock);
     	}
     	pthread_mutex_unlock(&gasolina_lock);
+    	pthread_mutex_unlock(&turno);
     	
     	printf("Frentista %d colocando gasolina no carro\n", id);
-    	sleep(1); /*Quantidade de tempo em que mexera com gasolina*/
+    	sleep(3); /*Quantidade de tempo em que mexera com gasolina*/
+
 
     	pthread_mutex_lock(&gasolina_lock);
     	bombas_gasolina --;
     	enchendo_gasolina=0;
     	pthread_cond_signal(&carro_status2); /* Liberou um carro*/
     	pthread_mutex_unlock(&gasolina_lock);
-    	sleep(3);
+    	sleep(2);
     	printf("Frenstista %d liberou um carro\n", id);
     	pthread_mutex_lock(&gasolina_lock);
     	bomba_cheia = 0;
@@ -117,12 +124,32 @@ void * frentistas_gasolina(void *arg){
 
 }
 
+void * fireman(void *arg){
+
+	while(1){
+		sleep(30);
+		pthread_mutex_lock(&turno);
+		pthread_mutex_lock(&gasolina_lock);
+		pthread_mutex_lock(&lock);
+		bombeiro_car =1;
+		printf("\n\n----------------------------------- WARNING -------------------------------\n\n");
+	    printf("Carros bateram, sera necessario a entrada dos bombeiros\n");
+		printf("Bombeiro salvando quem puder\n");
+		sleep(rand()%10 + 30);
+		pthread_mutex_unlock(&lock);
+		pthread_mutex_unlock(&gasolina_lock);
+		bombeiro_car = 0;
+		pthread_mutex_unlock(&turno);
+	}
+}
+
 void * pista_corrida(void *arg){
 	int posicao_atual;
     int id = *((int *) arg);
     int i, j, aux;
 
     while(fim==0){
+    	pthread_mutex_lock(&turno);
     	pthread_mutex_lock(&lock);
     	printf("\n");
     	/*-----------------------------------------------funcao para ocupar posicao ---------------*/
@@ -156,32 +183,40 @@ void * pista_corrida(void *arg){
 		}
     	/*-----------------------------------------------FIM funcao para ocupar posicao ---------------*/
     	pthread_mutex_unlock(&lock);
+    	pthread_mutex_unlock(&turno);
     	
         sleep(rand()%15 + 4); /*andando com a gasolina aleatoria que ele tem*/
-    	printf("Carro %d acabou a gasolina e esta indo abastecer\n", id );
-    	pthread_mutex_lock(&gasolina_lock);	
-    	posicoes[posicao_atual].ocupado=0; /*O carro deixou de ocupar essa posicao por ter parado*/
-    	bombas_gasolina++;
-    	if(bombas_gasolina ==1){
-    		printf("Acordando frentista\n");	
-    		pthread_cond_signal(&frentista_status);
-    	}
-    	if(bombas_gasolina > QNT_BOMBAS_GASOLINA){
-    		bomba_cheia = 1;
-    	}
-    	while(bomba_cheia == 1){
-    		printf("Carro %d chegou e está esperando na fila\n", id );
-    		pthread_cond_wait(&carro_status, &gasolina_lock);
-    	}
-    	enchendo_gasolina = 1;
-    	while(enchendo_gasolina == 1){
-    		printf("Carro %d esperando o frentista liberar\n", id );
-    		pthread_cond_wait(&carro_status2, &gasolina_lock); 
-    	}
+    	if(bombeiro_car == 0){ /*Ao bombeiro entrar em campo, os carros "encostam e voltam direto para a pista quando ele sair"*/ 
 
-    	pthread_mutex_unlock(&gasolina_lock);
+    		printf("Carro %d esta indo abastecer\n", id );
+	    	pthread_mutex_lock(&gasolina_lock);	
+	    	posicoes[posicao_atual].ocupado=0; /*O carro deixou de ocupar essa posicao por ter parado*/
+	    	bombas_gasolina++;
+	    	if(bombas_gasolina ==1){
+	    		printf("Acordando frentista\n");	
+	    		pthread_cond_signal(&frentista_status);
+	    	}
+	    	if(bombas_gasolina > QNT_BOMBAS_GASOLINA){
+	    		bomba_cheia = 1;
+	    	}
+	    	while(bomba_cheia == 1){
+	    		printf("Carro %d chegou e está esperando na fila\n", id );
+	    		pthread_cond_wait(&carro_status, &gasolina_lock);
+	    	}
+	    	enchendo_gasolina = 1;
+	    	while(enchendo_gasolina == 1){
+	    		printf("Carro %d esperando o frentista liberar\n", id );
+	    		pthread_cond_wait(&carro_status2, &gasolina_lock); 
+	    	}
 
-    	printf("Carro %d voltando para a pista\n", id );
+	    	pthread_mutex_unlock(&gasolina_lock);
+
+	    	printf("Carro %d voltando para a pista\n", id );
+    	}
+    	else{
+    		printf("Carro %d encostou para entrar na pista quando o bombeiro sair\n", id );
+    		sleep(10);
+    	}
 
     }
 
@@ -192,6 +227,7 @@ int main(){
 	pthread_t carros[QNT_CARROS];
 	pthread_t frentistas[QNT_FRENTISTAS];
 	pthread_t printar_tela;
+	pthread_t bombeiro;
 	int i, *cont;
     /* Inicializar bombas de gasolina*/
     bombas_gasolina = 0;
@@ -217,6 +253,10 @@ int main(){
     cont = 0;
     /*Thread criada apenas para entrar no loop de print na tela*/
     pthread_create(&printar_tela,NULL,&print_posicoes,(void*)cont);
+    
+    /*Thread criada apenas para colocar o bombeiro para rodar*/
+    pthread_create(&bombeiro,NULL,&fireman,(void*)cont);
+
     for(i = 0; i < QNT_CARROS; i++){
         if(pthread_join(carros[i], NULL))
         {
@@ -232,7 +272,8 @@ int main(){
         }
     }
    
-
+    pthread_join(printar_tela, NULL);
+    pthread_join(bombeiro, NULL);
 
 	return 0;
 }
