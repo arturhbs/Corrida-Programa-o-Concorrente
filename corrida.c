@@ -14,7 +14,7 @@ prioridade para pegar as posições serão os carros logo atrás destas.
 #include <stdlib.h>
 #include <unistd.h>
 
-#define QNT_CARROS 6
+#define QNT_CARROS 10
 #define QNT_BOMBAS_GASOLINA 1
 #define QNT_FRENTISTAS 1
 
@@ -39,12 +39,37 @@ int  bomba_cheia=0;
 
 
 void * print_posicoes(void *arg){
+	int i,j=0, aux, achou =0;
 	while(1){
 		sleep(4);
 		pthread_mutex_lock(&lock);
 		pthread_mutex_lock(&gasolina_lock);
-		printf("--------------------------Posicao atual --------------------------------\n");
-		for(int i=0;i<QNT_CARROS;i++){
+
+		// for(i=0;i<QNT_CARROS;i++){ /*Organiza o vetor para ser printado na ordem que estão os carros*/
+		// 	if(posicoes[i].ocupado == 0){
+		// 		printf("posicao i == %d\n", i+1);
+		// 		j = i+1;
+		// 		while(j < QNT_CARROS && achou != 1){
+		// 				printf("achou == %d\n",posicoes[i].ocupado );
+					
+		// 			if(posicoes[j].ocupado == 1 ){
+		// 				posicoes[j].ocupado = 0;
+		// 				posicoes[i].ocupado = 1;
+		// 				aux = posicoes[i].carro_ocupado;
+		// 				posicoes[i].carro_ocupado = posicoes[j].carro_ocupado;
+		// 				posicoes[j].carro_ocupado = aux;
+		// 				printf("achou == %d\n",achou );
+		// 				achou = 1;
+		// 			}
+
+		// 			j++;
+		// 		}
+		// 		achou=0;
+		// 	}
+		// }
+			
+		printf("\n\n--------------------------Posicao atual --------------------------------\n");
+		for( i=0;i<QNT_CARROS;i++){
 			if(posicoes[i].ocupado == 1){
 				printf("Carro %d na posicao %d\n", posicoes[i].carro_ocupado, posicoes[i].posicao );
 			}
@@ -53,7 +78,7 @@ void * print_posicoes(void *arg){
 
 			}
 		}
-		printf("\n");
+		printf("\n\n");
 		pthread_mutex_unlock(&lock);
 		pthread_mutex_unlock(&gasolina_lock);
 	}
@@ -71,7 +96,7 @@ void * frentistas_gasolina(void *arg){
     	}
     	pthread_mutex_unlock(&gasolina_lock);
     	
-    	printf("Frentista colocando gasolina no carro\n");
+    	printf("Frentista %d colocando gasolina no carro\n", id);
     	sleep(1); /*Quantidade de tempo em que mexera com gasolina*/
 
     	pthread_mutex_lock(&gasolina_lock);
@@ -80,8 +105,7 @@ void * frentistas_gasolina(void *arg){
     	pthread_cond_signal(&carro_status2); /* Liberou um carro*/
     	pthread_mutex_unlock(&gasolina_lock);
     	sleep(3);
-    	printf("Frenstista liberou um carro\n");
-    	printf("Tem mais %d bombas e darei signal agora\n", bombas_gasolina);
+    	printf("Frenstista %d liberou um carro\n", id);
     	pthread_mutex_lock(&gasolina_lock);
     	bomba_cheia = 0;
     	pthread_cond_signal(&carro_status);
